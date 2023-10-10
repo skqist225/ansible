@@ -15,9 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
-# Make coding more python3-ish
-from __future__ import (absolute_import, division, print_function)
-__metaclass__ = type
+from __future__ import annotations
 
 import os
 
@@ -148,7 +146,7 @@ class PlaybookExecutor:
                             encrypt = var.get("encrypt", None)
                             salt_size = var.get("salt_size", None)
                             salt = var.get("salt", None)
-                            unsafe = var.get("unsafe", None)
+                            unsafe = boolean(var.get("unsafe", False))
 
                             if vname not in self._variable_manager.extra_vars:
                                 if self._tqm:

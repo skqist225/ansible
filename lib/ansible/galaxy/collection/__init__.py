@@ -3,8 +3,7 @@
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 """Installed collections management package."""
 
-from __future__ import (absolute_import, division, print_function)
-__metaclass__ = type
+from __future__ import annotations
 
 import errno
 import fnmatch
@@ -544,7 +543,7 @@ def download_collections(
         for fqcn, concrete_coll_pin in dep_map.copy().items():  # FIXME: move into the provider
             if concrete_coll_pin.is_virtual:
                 display.display(
-                    'Virtual collection {coll!s} is not downloadable'.
+                    '{coll!s} is not downloadable'.
                     format(coll=to_text(concrete_coll_pin)),
                 )
                 continue
@@ -654,6 +653,7 @@ def install_collections(
         artifacts_manager,  # type: ConcreteArtifactsManager
         disable_gpg_verify,  # type: bool
         offline,  # type: bool
+        read_requirement_paths,  # type: set[str]
 ):  # type: (...) -> None
     """Install Ansible collections to the path specified.
 
@@ -668,7 +668,8 @@ def install_collections(
     """
     existing_collections = {
         Requirement(coll.fqcn, coll.ver, coll.src, coll.type, None)
-        for coll in find_existing_collections(output_path, artifacts_manager)
+        for path in {output_path} | read_requirement_paths
+        for coll in find_existing_collections(path, artifacts_manager)
     }
 
     unsatisfied_requirements = set(
@@ -739,7 +740,7 @@ def install_collections(
         for fqcn, concrete_coll_pin in dependency_map.items():
             if concrete_coll_pin.is_virtual:
                 display.vvvv(
-                    "'{coll!s}' is virtual, skipping.".
+                    "Encountered {coll!s}, skipping.".
                     format(coll=to_text(concrete_coll_pin)),
                 )
                 continue
@@ -1201,10 +1202,17 @@ def _build_files_manifest_walk(b_collection_path, namespace, name, ignore_patter
 
     manifest = _make_manifest()
 
+    def _discover_relative_base_directory(b_path: bytes, b_top_level_dir: bytes) -> bytes:
+        if b_path == b_top_level_dir:
+            return b''
+        common_prefix = os.path.commonpath((b_top_level_dir, b_path))
+        b_rel_base_dir = os.path.relpath(b_path, common_prefix)
+        return b_rel_base_dir.lstrip(os.path.sep.encode())
+
     def _walk(b_path, b_top_level_dir):
+        b_rel_base_dir = _discover_relative_base_directory(b_path, b_top_level_dir)
         for b_item in os.listdir(b_path):
             b_abs_path = os.path.join(b_path, b_item)
-            b_rel_base_dir = b'' if b_path == b_top_level_dir else b_path[len(b_top_level_dir) + 1:]
             b_rel_path = os.path.join(b_rel_base_dir, b_item)
             rel_path = to_text(b_rel_path, errors='surrogate_or_strict')
 
@@ -1323,6 +1331,8 @@ def _build_collection_tar(
 
                 if os.path.islink(b_src_path):
                     b_link_target = os.path.realpath(b_src_path)
+                    if not os.path.exists(b_link_target):
+                        raise AnsibleError(f"Failed to find the target path '{to_native(b_link_target)}' for the symlink '{to_native(b_src_path)}'.")
                     if _is_child_path(b_link_target, b_collection_path):
                         b_rel_path = os.path.relpath(b_link_target, start=os.path.dirname(b_src_path))
 
@@ -1418,6 +1428,10 @@ def find_existing_collections(path_filter, artifacts_manager, namespace_filter=N
 
     if path_filter and not is_sequence(path_filter):
         path_filter = [path_filter]
+    if namespace_filter and not is_sequence(namespace_filter):
+        namespace_filter = [namespace_filter]
+    if collection_filter and not is_sequence(collection_filter):
+        collection_filter = [collection_filter]
 
     paths = set()
     for path in files('ansible_collections').glob('*/*/'):
@@ -1439,9 +1453,9 @@ def find_existing_collections(path_filter, artifacts_manager, namespace_filter=N
     for path in paths:
         namespace = path.parent.name
         name = path.name
-        if namespace_filter and namespace != namespace_filter:
+        if namespace_filter and namespace not in namespace_filter:
             continue
-        if collection_filter and name != collection_filter:
+        if collection_filter and name not in collection_filter:
             continue
 
         if dedupe:
@@ -1809,15 +1823,15 @@ def _resolve_depenency_map(
         elif not req.specifier.contains(RESOLVELIB_VERSION.vstring):
             raise AnsibleError(f"ansible-galaxy requires {req.name}{req.specifier}")
 
-    if allow_pre_release:
-        pre_release_hint = ''
-    else:
-        pre_release_hint = 'Hint: Pre-releases are not installed by default unless the specific version is given. To enable pre-releases, use --pre.'
+    pre_release_hint = '' if allow_pre_release else (
+        'Hint: Pre-releases hosted on Galaxy or Automation Hub are not '
+        'installed by default unless a specific version is requested. '
+        'To enable pre-releases globally, use --pre.'
+    )
 
     collection_dep_resolver = build_collection_dependency_resolver(
         galaxy_apis=galaxy_apis,
         concrete_artifacts_manager=concrete_artifacts_manager,
-        user_requirements=requested_requirements,
         preferred_candidates=preferred_candidates,
         with_deps=not no_deps,
         with_pre_releases=allow_pre_release,
@@ -1853,8 +1867,7 @@ def _resolve_depenency_map(
         raise AnsibleError('\n'.join(error_msg_lines)) from dep_exc
     except CollectionDependencyInconsistentCandidate as dep_exc:
         parents = [
-            "%s.%s:%s" % (p.namespace, p.name, p.ver)
-            for p in dep_exc.criterion.iter_parent()
+            str(p) for p in dep_exc.criterion.iter_parent()
             if p is not None
         ]
 

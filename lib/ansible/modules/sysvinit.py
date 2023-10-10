@@ -4,8 +4,7 @@
 # (c) 2017 Ansible Project
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-from __future__ import absolute_import, division, print_function
-__metaclass__ = type
+from __future__ import annotations
 
 
 DOCUMENTATION = '''
@@ -26,8 +25,8 @@ options:
     state:
         choices: [ 'started', 'stopped', 'restarted', 'reloaded' ]
         description:
-            - C(started)/C(stopped) are idempotent actions that will not run commands unless necessary.
-              Not all init scripts support C(restarted) nor C(reloaded) natively, so these will both trigger a stop and start as needed.
+            - V(started)/V(stopped) are idempotent actions that will not run commands unless necessary.
+              Not all init scripts support V(restarted) nor V(reloaded) natively, so these will both trigger a stop and start as needed.
         type: str
     enabled:
         type: bool
@@ -36,7 +35,7 @@ options:
     sleep:
         default: 1
         description:
-            - If the service is being C(restarted) or C(reloaded) then sleep this many seconds between the stop and start command.
+            - If the service is being V(restarted) or V(reloaded) then sleep this many seconds between the stop and start command.
               This helps to workaround badly behaving services.
         type: int
     pattern:

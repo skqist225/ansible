@@ -63,9 +63,6 @@ from .coverage_util import (
 QUIET_PIP_SCRIPT_PATH = os.path.join(ANSIBLE_TEST_TARGET_ROOT, 'setup', 'quiet_pip.py')
 REQUIREMENTS_SCRIPT_PATH = os.path.join(ANSIBLE_TEST_TARGET_ROOT, 'setup', 'requirements.py')
 
-# IMPORTANT: Keep this in sync with the ansible-test.txt requirements file.
-VIRTUALENV_VERSION = '16.7.12'
-
 # Pip Abstraction
 
 
@@ -132,7 +129,6 @@ def install_requirements(
     ansible: bool = False,
     command: bool = False,
     coverage: bool = False,
-    virtualenv: bool = False,
     controller: bool = True,
     connection: t.Optional[Connection] = None,
 ) -> None:
@@ -172,7 +168,6 @@ def install_requirements(
         cryptography=cryptography,
         command=args.command if command else None,
         coverage=coverage,
-        virtualenv=virtualenv,
         minimize=False,
         sanity=None,
     )
@@ -207,18 +202,12 @@ def collect_requirements(
     ansible: bool,
     cryptography: bool,
     coverage: bool,
-    virtualenv: bool,
     minimize: bool,
     command: t.Optional[str],
     sanity: t.Optional[str],
 ) -> list[PipCommand]:
     """Collect requirements for the given Python using the specified arguments."""
     commands: list[PipCommand] = []
-
-    if virtualenv:
-        # sanity tests on Python 2.x install virtualenv when it is too old or is not already installed and the `--requirements` option is given
-        # the last version of virtualenv with no dependencies is used to minimize the changes made outside a virtual environment
-        commands.extend(collect_package_install(packages=[f'virtualenv=={VIRTUALENV_VERSION}'], constraints=False))
 
     if coverage:
         commands.extend(collect_package_install(packages=[f'coverage=={get_coverage_version(python.version).coverage_version}'], constraints=False))
@@ -250,6 +239,13 @@ def collect_requirements(
         if not minimize:
             # installed packages may have run-time dependencies on setuptools
             uninstall_packages.remove('setuptools')
+
+        # hack to allow the package-data sanity test to keep wheel in the venv
+        install_commands = [command for command in commands if isinstance(command, PipInstall)]
+        install_wheel = any(install.has_package('wheel') for install in install_commands)
+
+        if install_wheel:
+            uninstall_packages.remove('wheel')
 
         commands.extend(collect_uninstall(packages=uninstall_packages))
 
@@ -434,22 +430,12 @@ def get_venv_packages(python: PythonConfig) -> dict[str, str]:
     #       See: https://github.com/ansible/base-test-container/blob/main/files/installer.py
 
     default_packages = dict(
-        pip='21.3.1',
-        setuptools='60.8.2',
+        pip='23.1.2',
+        setuptools='67.7.2',
         wheel='0.37.1',
     )
 
-    override_packages = {
-        '2.7': dict(
-            pip='20.3.4',  # 21.0 requires Python 3.6+
-            setuptools='44.1.1',  # 45.0.0 requires Python 3.5+
-            wheel=None,
-        ),
-        '3.6': dict(
-            pip='21.3.1',  # 22.0 requires Python 3.7+
-            setuptools='59.6.0',  # 59.7.0 requires Python 3.7+
-            wheel=None,
-        ),
+    override_packages: dict[str, dict[str, str]] = {
     }
 
     packages = {name: version or default_packages[name] for name, version in override_packages.get(python.version, default_packages).items()}

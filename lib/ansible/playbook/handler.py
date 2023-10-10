@@ -15,9 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
-# Make coding more python3-ish
-from __future__ import (absolute_import, division, print_function)
-__metaclass__ = type
+from __future__ import annotations
 
 from ansible.playbook.attribute import NonInheritableFieldAttribute
 from ansible.playbook.task import Task
@@ -52,6 +50,9 @@ class Handler(Task):
 
     def remove_host(self, host):
         self.notified_hosts = [h for h in self.notified_hosts if h != host]
+
+    def clear_hosts(self):
+        self.notified_hosts = []
 
     def is_host_notified(self, host):
         return host in self.notified_hosts

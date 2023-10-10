@@ -14,9 +14,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
-# Make coding more python3-ish
-from __future__ import (absolute_import, division, print_function)
-__metaclass__ = type
+from __future__ import annotations
 
 DOCUMENTATION = '''
     name: linear
@@ -241,6 +239,12 @@ class StrategyModule(StrategyBase):
                         self._blocked_hosts[host.get_name()] = True
                         self._queue_task(host, task, task_vars, play_context)
                         del task_vars
+
+                    if isinstance(task, Handler):
+                        if run_once:
+                            task.clear_hosts()
+                        else:
+                            task.remove_host(host)
 
                     # if we're bypassing the host loop, break out now
                     if run_once:

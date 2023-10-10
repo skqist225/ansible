@@ -3,9 +3,7 @@
 # Copyright: (c) 2018, Ansible Project
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-# Make coding more python3-ish
-from __future__ import (absolute_import, division, print_function)
-__metaclass__ = type
+from __future__ import annotations
 
 import base64
 import json
@@ -739,8 +737,7 @@ class ActionBase(ABC):
             return remote_paths
 
         # we'll need this down here
-        become_link = get_versioned_doclink('user_guide/become.html')
-
+        become_link = get_versioned_doclink('playbook_guide/playbooks_privilege_escalation.html')
         # Step 3f: Common group
         # Otherwise, we're a normal user. We failed to chown the paths to the
         # unprivileged user, but if we have a common group with them, we should
@@ -1340,7 +1337,7 @@ class ActionBase(ABC):
         display.debug(u"_low_level_execute_command() done: rc=%d, stdout=%s, stderr=%s" % (rc, out, err))
         return dict(rc=rc, stdout=out, stdout_lines=out.splitlines(), stderr=err, stderr_lines=err.splitlines())
 
-    def _get_diff_data(self, destination, source, task_vars, source_file=True):
+    def _get_diff_data(self, destination, source, task_vars, content, source_file=True):
 
         # Note: Since we do not diff the source and destination before we transform from bytes into
         # text the diff between source and destination may not be accurate.  To fix this, we'd need
@@ -1398,7 +1395,10 @@ class ActionBase(ABC):
                     if b"\x00" in src_contents:
                         diff['src_binary'] = 1
                     else:
-                        diff['after_header'] = source
+                        if content:
+                            diff['after_header'] = destination
+                        else:
+                            diff['after_header'] = source
                         diff['after'] = to_text(src_contents)
             else:
                 display.debug(u"source of file passed in")

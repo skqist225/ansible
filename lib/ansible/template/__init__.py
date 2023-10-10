@@ -15,9 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
-# Make coding more python3-ish
-from __future__ import (absolute_import, division, print_function)
-__metaclass__ = type
+from __future__ import annotations
 
 import ast
 import datetime
@@ -55,7 +53,7 @@ from ansible.template.vars import AnsibleJ2Vars
 from ansible.utils.display import Display
 from ansible.utils.listify import listify_lookup_plugin_terms
 from ansible.utils.native_jinja import NativeJinjaText
-from ansible.utils.unsafe_proxy import wrap_var
+from ansible.utils.unsafe_proxy import to_unsafe_text, wrap_var
 
 display = Display()
 
@@ -103,9 +101,9 @@ def generate_ansible_template_vars(path, fullpath=None, dest_path=None):
     managed_str = managed_default.format(
         host=temp_vars['template_host'],
         uid=temp_vars['template_uid'],
-        file=temp_vars['template_path'],
+        file=temp_vars['template_path'].replace('%', '%%'),
     )
-    temp_vars['ansible_managed'] = to_text(time.strftime(to_native(managed_str), time.localtime(os.path.getmtime(b_path))))
+    temp_vars['ansible_managed'] = to_unsafe_text(time.strftime(to_native(managed_str), time.localtime(os.path.getmtime(b_path))))
 
     return temp_vars
 
@@ -445,11 +443,11 @@ class JinjaPluginIntercept(MutableMapping):
 
         self._pluginloader = pluginloader
 
-        # cache of resolved plugins
+        # Jinja environment's mapping of known names (initially just J2 builtins)
         self._delegatee = delegatee
 
-        # track loaded plugins here as cache above includes 'jinja2' filters but ours should override
-        self._loaded_builtins = set()
+        # our names take precedence over Jinja's, but let things we've tried to resolve skip the pluginloader
+        self._seen_it = set()
 
     def __getitem__(self, key):
 
@@ -457,7 +455,10 @@ class JinjaPluginIntercept(MutableMapping):
             raise ValueError('key must be a string, got %s instead' % type(key))
 
         original_exc = None
-        if key not in self._loaded_builtins:
+        if key not in self._seen_it:
+            # this looks too early to set this- it isn't. Setting it here keeps requests for Jinja builtins from
+            # going through the pluginloader more than once, which is extremely slow for something that won't ever succeed.
+            self._seen_it.add(key)
             plugin = None
             try:
                 plugin = self._pluginloader.get(key)
@@ -471,12 +472,12 @@ class JinjaPluginIntercept(MutableMapping):
             if plugin:
                 # set in filter cache and avoid expensive plugin load
                 self._delegatee[key] = plugin.j2_function
-                self._loaded_builtins.add(key)
 
         # raise template syntax error if we could not find ours or jinja2 one
         try:
             func = self._delegatee[key]
         except KeyError as e:
+            self._seen_it.remove(key)
             raise TemplateSyntaxError('Could not load "%s": %s' % (key, to_native(original_exc or e)), 0)
 
         # if i do have func and it is a filter, it nees wrapping
@@ -829,7 +830,7 @@ class Templar:
     def _now_datetime(self, utc=False, fmt=None):
         '''jinja2 global function to return current datetime, potentially formatted via strftime'''
         if utc:
-            now = datetime.datetime.utcnow()
+            now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
         else:
             now = datetime.datetime.now()
 

@@ -4,8 +4,7 @@
 # Copyright: Ansible Project
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-from __future__ import absolute_import, division, print_function
-__metaclass__ = type
+from __future__ import annotations
 
 import json
 import os
@@ -453,7 +452,7 @@ class TestComplexOptions:
            'bar1': None, 'bar2': None, 'bar3': None, 'bar4': None}]
          ),
         # Check for elements in sub-options
-        ({"foobar": [{"foo": "good", "bam": "required_one_of", "bar1": [1, "good", "yes"], "bar2": ['1', 1], "bar3":['1.3', 1.3, 1]}]},
+        ({"foobar": [{"foo": "good", "bam": "required_one_of", "bar1": [1, "good", "yes"], "bar2": ['1', 1], "bar3": ['1.3', 1.3, 1]}]},
          [{'foo': 'good', 'bam1': None, 'bam2': 'test', 'bam3': None, 'bam4': None, 'bar': None, 'baz': None, 'bam': 'required_one_of',
            'bar1': ["1", "good", "yes"], 'bar2': [1, 1], 'bar3': [1.3, 1.3, 1.0], 'bar4': None}]
          ),

@@ -15,9 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
-# Make coding more python3-ish
-from __future__ import (absolute_import, division, print_function)
-__metaclass__ = type
+from __future__ import annotations
 
 import os
 import pytest
@@ -42,7 +40,6 @@ MODULE_UTILS_BASIC_FILES = frozenset(('ansible/__init__.py',
                                       'ansible/module_utils/basic.py',
                                       'ansible/module_utils/six/__init__.py',
                                       'ansible/module_utils/_text.py',
-                                      'ansible/module_utils/common/_json_compat.py',
                                       'ansible/module_utils/common/collections.py',
                                       'ansible/module_utils/common/parameters.py',
                                       'ansible/module_utils/common/warnings.py',

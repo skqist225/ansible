@@ -2,8 +2,7 @@
 # Copyright: (c) 2019, Ansible Project
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-from __future__ import (absolute_import, division, print_function)
-__metaclass__ = type
+from __future__ import annotations
 
 import collections
 import datetime
@@ -11,7 +10,6 @@ import functools
 import hashlib
 import json
 import os
-import socket
 import stat
 import tarfile
 import time
@@ -66,7 +64,7 @@ def should_retry_error(exception):
 
         # Handle common URL related errors such as TimeoutError, and BadStatusLine
         # Note: socket.timeout is only required for Py3.9
-        if isinstance(orig_exc, (TimeoutError, BadStatusLine, IncompleteRead, socket.timeout)):
+        if isinstance(orig_exc, (TimeoutError, BadStatusLine, IncompleteRead)):
             return True
 
     return False
@@ -360,7 +358,8 @@ class GalaxyAPI:
             valid = False
             if cache_key in server_cache:
                 expires = datetime.datetime.strptime(server_cache[cache_key]['expires'], iso_datetime_format)
-                valid = datetime.datetime.utcnow() < expires
+                expires = expires.replace(tzinfo=datetime.timezone.utc)
+                valid = datetime.datetime.now(datetime.timezone.utc) < expires
 
             is_paginated_url = 'page' in query or 'offset' in query
             if valid and not is_paginated_url:
@@ -385,7 +384,7 @@ class GalaxyAPI:
 
             elif not is_paginated_url:
                 # The cache entry had expired or does not exist, start a new blank entry to be filled later.
-                expires = datetime.datetime.utcnow()
+                expires = datetime.datetime.now(datetime.timezone.utc)
                 expires += datetime.timedelta(days=1)
                 server_cache[cache_key] = {
                     'expires': expires.strftime(iso_datetime_format),

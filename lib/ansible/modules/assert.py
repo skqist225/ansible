@@ -3,8 +3,7 @@
 # Copyright: (c) 2012, Dag Wieers <dag@wieers.com>
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-from __future__ import absolute_import, division, print_function
-__metaclass__ = type
+from __future__ import annotations
 
 
 DOCUMENTATION = r'''
@@ -36,7 +35,7 @@ options:
     version_added: "2.7"
   quiet:
     description:
-      - Set this to C(true) to avoid verbose output.
+      - Set this to V(true) to avoid verbose output.
     type: bool
     default: no
     version_added: "2.8"

@@ -2,46 +2,21 @@
 # Copyright (c), Toshio Kuratomi <tkuratomi@ansible.com> 2016
 # Simplified BSD License (see licenses/simplified_bsd.txt or https://opensource.org/licenses/BSD-2-Clause)
 
-from __future__ import absolute_import, division, print_function
-__metaclass__ = type
+from __future__ import annotations
 
+import json
 import sys
 
 # Used for determining if the system is running a new enough python version
 # and should only restrict on our documented minimum versions
-_PY3_MIN = sys.version_info >= (3, 6)
-_PY2_MIN = (2, 7) <= sys.version_info < (3,)
-_PY_MIN = _PY3_MIN or _PY2_MIN
+_PY_MIN = (3, 7)
 
-if not _PY_MIN:
-    print(
-        '\n{"failed": true, '
-        '"msg": "ansible-core requires a minimum of Python2 version 2.7 or Python3 version 3.6. Current version: %s"}' % ''.join(sys.version.splitlines())
-    )
+if sys.version_info < _PY_MIN:
+    print(json.dumps(dict(
+        failed=True,
+        msg=f"ansible-core requires a minimum of Python version {'.'.join(map(str, _PY_MIN))}. Current version: {''.join(sys.version.splitlines())}",
+    )))
     sys.exit(1)
-
-FILE_ATTRIBUTES = {
-    'A': 'noatime',
-    'a': 'append',
-    'c': 'compressed',
-    'C': 'nocow',
-    'd': 'nodump',
-    'D': 'dirsync',
-    'e': 'extents',
-    'E': 'encrypted',
-    'h': 'blocksize',
-    'i': 'immutable',
-    'I': 'indexed',
-    'j': 'journalled',
-    'N': 'inline',
-    's': 'zero',
-    'S': 'synchronous',
-    't': 'notail',
-    'T': 'blockroot',
-    'u': 'undelete',
-    'X': 'compressedraw',
-    'Z': 'compresseddirty',
-}
 
 # Ansible modules can be written in any language.
 # The functions available here can be used to do many common tasks,
@@ -151,12 +126,6 @@ def _get_available_hash_algorithms():
 
 AVAILABLE_HASH_ALGORITHMS = _get_available_hash_algorithms()
 
-try:
-    from ansible.module_utils.common._json_compat import json
-except ImportError as e:
-    print('\n{{"msg": "Error: ansible requires the stdlib json: {0}", "failed": true}}'.format(to_native(e)))
-    sys.exit(1)
-
 from ansible.module_utils.six.moves.collections_abc import (
     KeysView,
     Mapping, MutableMapping,
@@ -172,6 +141,7 @@ from ansible.module_utils.common.file import (
     is_executable,
     format_attributes,
     get_flags_from_attributes,
+    FILE_ATTRIBUTES,
 )
 from ansible.module_utils.common.sys_info import (
     get_distribution,
@@ -409,8 +379,8 @@ def _load_params():
     try:
         params = json.loads(buffer.decode('utf-8'))
     except ValueError:
-        # This helper used too early for fail_json to work.
-        print('\n{"msg": "Error: Module unable to decode valid JSON on stdin.  Unable to figure out what parameters were passed", "failed": true}')
+        # This helper is used too early for fail_json to work.
+        print('\n{"msg": "Error: Module unable to decode stdin/parameters as valid JSON. Unable to parse what parameters were passed", "failed": true}')
         sys.exit(1)
 
     if PY2:
@@ -421,7 +391,7 @@ def _load_params():
     except KeyError:
         # This helper does not have access to fail_json so we have to print
         # json output on our own.
-        print('\n{"msg": "Error: Module unable to locate ANSIBLE_MODULE_ARGS in json data from stdin.  Unable to figure out what parameters were passed", '
+        print('\n{"msg": "Error: Module unable to locate ANSIBLE_MODULE_ARGS in JSON data from stdin. Unable to figure out what parameters were passed", '
               '"failed": true}')
         sys.exit(1)
 
@@ -590,7 +560,7 @@ class AnsibleModule(object):
             raise AssertionError("implementation error -- version and date must not both be set")
         deprecate(msg, version=version, date=date, collection_name=collection_name)
         # For compatibility, we accept that neither version nor date is set,
-        # and treat that the same as if version would haven been set
+        # and treat that the same as if version would not have been set
         if date is not None:
             self.log('[DEPRECATION WARNING] %s %s' % (msg, date))
         else:
@@ -717,7 +687,7 @@ class AnsibleModule(object):
 
     def find_mount_point(self, path):
         '''
-            Takes a path and returns it's mount point
+            Takes a path and returns its mount point
 
         :param path: a string type with a filesystem path
         :returns: the path to the mount point as a text type
@@ -913,7 +883,7 @@ class AnsibleModule(object):
                                    details=to_native(e))
 
                 if mode != stat.S_IMODE(mode):
-                    # prevent mode from having extra info orbeing invalid long number
+                    # prevent mode from having extra info or being invalid long number
                     path = to_text(b_path)
                     self.fail_json(path=path, msg="Invalid mode supplied, only permission info is allowed", details=mode)
 
@@ -1844,6 +1814,14 @@ class AnsibleModule(object):
         '''
         Execute a command, returns rc, stdout, and stderr.
 
+        The mechanism of this method for reading stdout and stderr differs from
+        that of CPython subprocess.Popen.communicate, in that this method will
+        stop reading once the spawned command has exited and stdout and stderr
+        have been consumed, as opposed to waiting until stdout/stderr are
+        closed. This can be an important distinction, when taken into account
+        that a forked or backgrounded process may hold stdout or stderr open
+        for longer than the spawned command.
+
         :arg args: is the command to run
             * If args is a list, the command will be run with shell=False.
             * If args is a string and use_unsafe_shell=False it will split args to a list and run with shell=False
@@ -2023,17 +2001,17 @@ class AnsibleModule(object):
             if before_communicate_callback:
                 before_communicate_callback(cmd)
 
-            # the communication logic here is essentially taken from that
-            # of the _communicate() function in ssh.py
-
             stdout = b''
             stderr = b''
-            try:
-                selector = selectors.DefaultSelector()
-            except (IOError, OSError):
-                # Failed to detect default selector for the given platform
-                # Select PollSelector which is supported by major platforms
+
+            # Mirror the CPython subprocess logic and preference for the selector to use.
+            # poll/select have the advantage of not requiring any extra file
+            # descriptor, contrarily to epoll/kqueue (also, they require a single
+            # syscall).
+            if hasattr(selectors, 'PollSelector'):
                 selector = selectors.PollSelector()
+            else:
+                selector = selectors.SelectSelector()
 
             if data:
                 if not binary_data:
@@ -2041,53 +2019,58 @@ class AnsibleModule(object):
                 if isinstance(data, text_type):
                     data = to_bytes(data)
 
-            if not prompt_re:
-                stdout, stderr = cmd.communicate(input=data)
-            else:
-                # We only need this to look for a prompt, to abort instead of hanging
-                selector.register(cmd.stdout, selectors.EVENT_READ)
-                selector.register(cmd.stderr, selectors.EVENT_READ)
-                if os.name == 'posix':
-                    fcntl.fcntl(cmd.stdout.fileno(), fcntl.F_SETFL, fcntl.fcntl(cmd.stdout.fileno(), fcntl.F_GETFL) | os.O_NONBLOCK)
-                    fcntl.fcntl(cmd.stderr.fileno(), fcntl.F_SETFL, fcntl.fcntl(cmd.stderr.fileno(), fcntl.F_GETFL) | os.O_NONBLOCK)
+            selector.register(cmd.stdout, selectors.EVENT_READ)
+            selector.register(cmd.stderr, selectors.EVENT_READ)
 
-                if data:
-                    cmd.stdin.write(data)
-                    cmd.stdin.close()
+            if os.name == 'posix':
+                fcntl.fcntl(cmd.stdout.fileno(), fcntl.F_SETFL, fcntl.fcntl(cmd.stdout.fileno(), fcntl.F_GETFL) | os.O_NONBLOCK)
+                fcntl.fcntl(cmd.stderr.fileno(), fcntl.F_SETFL, fcntl.fcntl(cmd.stderr.fileno(), fcntl.F_GETFL) | os.O_NONBLOCK)
 
-                while True:
-                    events = selector.select(1)
-                    for key, event in events:
-                        b_chunk = key.fileobj.read()
-                        if b_chunk == b(''):
-                            selector.unregister(key.fileobj)
-                        if key.fileobj == cmd.stdout:
-                            stdout += b_chunk
-                        elif key.fileobj == cmd.stderr:
-                            stderr += b_chunk
-                    # if we're checking for prompts, do it now
-                    if prompt_re:
-                        if prompt_re.search(stdout) and not data:
-                            if encoding:
-                                stdout = to_native(stdout, encoding=encoding, errors=errors)
-                            return (257, stdout, "A prompt was encountered while running a command, but no input data was specified")
-                    # only break out if no pipes are left to read or
-                    # the pipes are completely read and
-                    # the process is terminated
-                    if (not events or not selector.get_map()) and cmd.poll() is not None:
-                        break
-                    # No pipes are left to read but process is not yet terminated
-                    # Only then it is safe to wait for the process to be finished
-                    # NOTE: Actually cmd.poll() is always None here if no selectors are left
-                    elif not selector.get_map() and cmd.poll() is None:
-                        cmd.wait()
-                        # The process is terminated. Since no pipes to read from are
-                        # left, there is no need to call select() again.
-                        break
+            if data:
+                cmd.stdin.write(data)
+                cmd.stdin.close()
 
-                cmd.stdout.close()
-                cmd.stderr.close()
-                selector.close()
+            while True:
+                # A timeout of 1 is both a little short and a little long.
+                # With None we could deadlock, with a lower value we would
+                # waste cycles. As it is, this is a mild inconvenience if
+                # we need to exit, and likely doesn't waste too many cycles
+                events = selector.select(1)
+                stdout_changed = False
+                for key, event in events:
+                    b_chunk = key.fileobj.read(32768)
+                    if not b_chunk:
+                        selector.unregister(key.fileobj)
+                    elif key.fileobj == cmd.stdout:
+                        stdout += b_chunk
+                        stdout_changed = True
+                    elif key.fileobj == cmd.stderr:
+                        stderr += b_chunk
+
+                # if we're checking for prompts, do it now, but only if stdout
+                # actually changed since the last loop
+                if prompt_re and stdout_changed and prompt_re.search(stdout) and not data:
+                    if encoding:
+                        stdout = to_native(stdout, encoding=encoding, errors=errors)
+                    return (257, stdout, "A prompt was encountered while running a command, but no input data was specified")
+
+                # break out if no pipes are left to read or the pipes are completely read
+                # and the process is terminated
+                if (not events or not selector.get_map()) and cmd.poll() is not None:
+                    break
+
+                # No pipes are left to read but process is not yet terminated
+                # Only then it is safe to wait for the process to be finished
+                # NOTE: Actually cmd.poll() is always None here if no selectors are left
+                elif not selector.get_map() and cmd.poll() is None:
+                    cmd.wait()
+                    # The process is terminated. Since no pipes to read from are
+                    # left, there is no need to call select() again.
+                    break
+
+            cmd.stdout.close()
+            cmd.stderr.close()
+            selector.close()
 
             rc = cmd.returncode
         except (OSError, IOError) as e:

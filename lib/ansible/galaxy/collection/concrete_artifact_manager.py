@@ -3,8 +3,7 @@
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 """Concrete collection candidate management helper module."""
 
-from __future__ import (absolute_import, division, print_function)
-__metaclass__ = type
+from __future__ import annotations
 
 import json
 import os
@@ -140,7 +139,7 @@ class ConcreteArtifactsManager:
             url, sha256_hash, token = self._galaxy_collection_cache[collection]
         except KeyError as key_err:
             raise RuntimeError(
-                'The is no known source for {coll!s}'.
+                'There is no known source for {coll!s}'.
                 format(coll=collection),
             ) from key_err
 
@@ -702,6 +701,11 @@ def _get_meta_from_installed_dir(
 def _get_meta_from_tar(
         b_path,  # type: bytes
 ):  # type: (...) -> dict[str, t.Union[str, list[str], dict[str, str], None, t.Type[Sentinel]]]
+    if not os.path.exists(b_path):
+        raise AnsibleError(
+            f"Unable to find collection artifact file at '{to_native(b_path)}'."
+        )
+
     if not tarfile.is_tarfile(b_path):
         raise AnsibleError(
             "Collection artifact at '{path!s}' is not a valid tar file.".

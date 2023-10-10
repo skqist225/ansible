@@ -16,9 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
-# Make coding more python3-ish
-from __future__ import (absolute_import, division, print_function)
-__metaclass__ = type
+from __future__ import annotations
 
 import json
 import os
@@ -286,7 +284,7 @@ class ActionModule(ActionBase):
             # The checksums don't match and we will change or error out.
 
             if self._play_context.diff and not raw:
-                result['diff'].append(self._get_diff_data(dest_file, source_full, task_vars))
+                result['diff'].append(self._get_diff_data(dest_file, source_full, task_vars, content))
 
             if self._play_context.check_mode:
                 self._remove_tempfile_if_content_defined(content, content_tempfile)

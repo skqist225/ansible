@@ -4,8 +4,7 @@
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 # PYTHON_ARGCOMPLETE_OK
 
-from __future__ import (absolute_import, division, print_function)
-__metaclass__ = type
+from __future__ import annotations
 
 # ansible.cli needs to be imported first, to ensure the source bin/* scripts run that code first
 from ansible.cli import CLI
@@ -80,7 +79,7 @@ class PullCLI(CLI):
 
         super(PullCLI, self).init_parser(
             usage='%prog -U <repository> [options] [<playbook.yml>]',
-            desc="pulls playbooks from a VCS repo and executes them for the local host")
+            desc="pulls playbooks from a VCS repo and executes them on target host")
 
         # Do not add check_options as there's a conflict with --checkout/-C
         opt_help.add_connect_options(self.parser)

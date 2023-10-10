@@ -4,8 +4,7 @@
 # (c) 2017 Ansible Project
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-from __future__ import absolute_import, division, print_function
-__metaclass__ = type
+from __future__ import annotations
 
 import sys
 
@@ -60,20 +59,6 @@ class TestImports(ModuleTestCase):
         mock_import.side_effect = _mock_import
         mod = builtins.__import__('ansible.module_utils.basic')
         self.assertFalse(mod.module_utils.basic.HAVE_SELINUX)
-
-    @patch.object(builtins, '__import__')
-    def test_module_utils_basic_import_json(self, mock_import):
-        def _mock_import(name, *args, **kwargs):
-            if name == 'ansible.module_utils.common._json_compat':
-                raise ImportError
-            return realimport(name, *args, **kwargs)
-
-        self.clear_modules(['json', 'ansible.module_utils.basic'])
-        builtins.__import__('ansible.module_utils.basic')
-        self.clear_modules(['json', 'ansible.module_utils.basic'])
-        mock_import.side_effect = _mock_import
-        with self.assertRaises(SystemExit):
-            builtins.__import__('ansible.module_utils.basic')
 
     # FIXME: doesn't work yet
     # @patch.object(builtins, 'bytes')

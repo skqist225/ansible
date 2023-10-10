@@ -3,9 +3,7 @@
 # Copyright: (c) 2018, Ansible Project
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-# Make coding more python3-ish
-from __future__ import (absolute_import, division, print_function)
-__metaclass__ = type
+from __future__ import annotations
 
 import locale
 import os
@@ -13,9 +11,9 @@ import sys
 
 # Used for determining if the system is running a new enough python version
 # and should only restrict on our documented minimum versions
-if sys.version_info < (3, 9):
+if sys.version_info < (3, 10):
     raise SystemExit(
-        'ERROR: Ansible requires Python 3.9 or newer on the controller. '
+        'ERROR: Ansible requires Python 3.10 or newer on the controller. '
         'Current version: %s' % ''.join(sys.version.splitlines())
     )
 

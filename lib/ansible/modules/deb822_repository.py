@@ -2,8 +2,7 @@
 # Copyright: Contributors to the Ansible project
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-from __future__ import absolute_import, division, print_function
-__metaclass__ = type
+from __future__ import annotations
 
 DOCUMENTATION = '''
 author: 'Ansible Core Team (@ansible)'
@@ -97,7 +96,7 @@ options:
         - >-
           Suite can specify an exact path in relation to the URI(s) provided,
           in which case the Components: must be omitted and suite must end
-          with a slash C( / ). Alternatively, it may take the form of a
+          with a slash (C(/)). Alternatively, it may take the form of a
           distribution version (e.g. a version codename like disco or artful).
           If the suite does not specify a path, at least one component must
           be present.
@@ -124,7 +123,7 @@ options:
         elements: str
         description:
         - Which types of packages to look for from a given source; either
-          binary C(deb) or source code C(deb-src)
+          binary V(deb) or source code V(deb-src)
     uris:
         description:
         - The URIs must specify the base of the Debian distribution archive,

@@ -69,8 +69,8 @@ class CoverageVersion:
 
 COVERAGE_VERSIONS = (
     # IMPORTANT: Keep this in sync with the ansible-test.txt requirements file.
-    CoverageVersion('6.5.0', 7, (3, 7), (3, 12)),
-    CoverageVersion('4.5.4', 0, (2, 6), (3, 6)),
+    CoverageVersion('7.3.2', 7, (3, 8), (3, 12)),
+    CoverageVersion('6.5.0', 7, (3, 7), (3, 7)),
 )
 """
 This tuple specifies the coverage version to use for Python version ranges.
@@ -250,7 +250,9 @@ def generate_ansible_coverage_config() -> str:
     coverage_config = '''
 [run]
 branch = True
-concurrency = multiprocessing
+concurrency =
+    multiprocessing
+    thread
 parallel = True
 
 omit =
@@ -271,7 +273,9 @@ def generate_collection_coverage_config(args: TestConfig) -> str:
     coverage_config = '''
 [run]
 branch = True
-concurrency = multiprocessing
+concurrency =
+    multiprocessing
+    thread
 parallel = True
 disable_warnings =
     no-data-collected

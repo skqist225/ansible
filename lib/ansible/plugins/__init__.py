@@ -17,9 +17,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
-# Make coding more python3-ish
-from __future__ import (absolute_import, division, print_function)
-__metaclass__ = type
+from __future__ import annotations
 
 from abc import ABC
 
@@ -54,6 +52,9 @@ class AnsiblePlugin(ABC):
 
     # allow extra passthrough parameters
     allow_extras = False
+
+    # Set by plugin loader
+    _load_name: str
 
     def __init__(self):
         self._options = {}

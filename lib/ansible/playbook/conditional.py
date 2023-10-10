@@ -15,9 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
-# Make coding more python3-ish
-from __future__ import (absolute_import, division, print_function)
-__metaclass__ = type
+from __future__ import annotations
 
 import typing as t
 
@@ -101,10 +99,15 @@ class Conditional:
                 elif conditional == "":
                     return False
 
+            # If the result of the first-pass template render (to resolve inline templates) is marked unsafe,
+            # explicitly disable lookups on the final pass to prevent evaluation of untrusted content in the
+            # constructed template.
+            disable_lookups = hasattr(conditional, '__UNSAFE__')
+
             # NOTE The spaces around True and False are intentional to short-circuit literal_eval for
             #      jinja2_native=False and avoid its expensive calls.
             return templar.template(
-                "{%% if %s %%} True {%% else %%} False {%% endif %%}" % conditional
-            ).strip() == "True"
+                "{%% if %s %%} True {%% else %%} False {%% endif %%}" % conditional,
+                disable_lookups=disable_lookups).strip() == "True"
         except AnsibleUndefinedVariable as e:
             raise AnsibleUndefinedVariable("error while evaluating conditional (%s): %s" % (original, e))

@@ -4,8 +4,7 @@
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 # PYTHON_ARGCOMPLETE_OK
 
-from __future__ import (absolute_import, division, print_function)
-__metaclass__ = type
+from __future__ import annotations
 
 # ansible.cli needs to be imported first, to ensure the source bin/* scripts run that code first
 from ansible.cli import CLI
@@ -49,11 +48,6 @@ TARGET_OPTIONS = C.DOCUMENTABLE_PLUGINS + ('role', 'keyword',)
 PB_OBJECTS = ['Play', 'Role', 'Block', 'Task']
 PB_LOADED = {}
 SNIPPETS = ['inventory', 'lookup', 'module']
-
-
-def add_collection_plugins(plugin_list, plugin_type, coll_filter=None):
-    display.deprecated("add_collection_plugins method, use ansible.plugins.list functions instead.", version='2.17')
-    plugin_list.update(list_plugins(plugin_type, coll_filter))
 
 
 def jdump(text):
@@ -163,8 +157,8 @@ class RoleMixin(object):
             might be fully qualified with the collection name (e.g., community.general.roleA)
             or not (e.g., roleA).
 
-        :param collection_filter: A string containing the FQCN of a collection which will be
-            used to limit results. This filter will take precedence over the name_filters.
+        :param collection_filter: A list of strings containing the FQCN of a collection which will
+            be used to limit results. This filter will take precedence over the name_filters.
 
         :returns: A set of tuples consisting of: role name, collection name, collection path
         """
@@ -425,11 +419,6 @@ class DocCLI(CLI, RoleMixin):
         return f"`{text}'"
 
     @classmethod
-    def find_plugins(cls, path, internal, plugin_type, coll_filter=None):
-        display.deprecated("find_plugins method as it is incomplete/incorrect. use ansible.plugins.list functions instead.", version='2.17')
-        return list_plugins(plugin_type, coll_filter, [path]).keys()
-
-    @classmethod
     def tty_ify(cls, text):
 
         # general formatting
@@ -678,12 +667,11 @@ class DocCLI(CLI, RoleMixin):
     def _get_collection_filter(self):
 
         coll_filter = None
-        if len(context.CLIARGS['args']) == 1:
-            coll_filter = context.CLIARGS['args'][0]
-            if not AnsibleCollectionRef.is_valid_collection_name(coll_filter):
-                raise AnsibleError('Invalid collection name (must be of the form namespace.collection): {0}'.format(coll_filter))
-            elif len(context.CLIARGS['args']) > 1:
-                raise AnsibleOptionsError("Only a single collection filter is supported.")
+        if len(context.CLIARGS['args']) >= 1:
+            coll_filter = context.CLIARGS['args']
+            for coll_name in coll_filter:
+                if not AnsibleCollectionRef.is_valid_collection_name(coll_name):
+                    raise AnsibleError('Invalid collection name (must be of the form namespace.collection): {0}'.format(coll_name))
 
         return coll_filter
 

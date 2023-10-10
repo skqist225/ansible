@@ -2,9 +2,7 @@
 # Copyright: (c) 2019, Ansible Project
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-# Make coding more python3-ish
-from __future__ import (absolute_import, division, print_function)
-__metaclass__ = type
+from __future__ import annotations
 
 import json
 import os
@@ -39,10 +37,17 @@ def reset_cli_args():
     co.GlobalCLIArgs._Singleton__instance = None
 
 
-@pytest.fixture()
-def collection_input(tmp_path_factory):
-    ''' Creates a collection skeleton directory for build tests '''
-    test_dir = to_text(tmp_path_factory.mktemp('test-ÅÑŚÌβŁÈ Collections Input'))
+@pytest.fixture
+def collection_path_suffix(request):
+    """Return test collection path suffix or the default."""
+    return getattr(request, 'param', 'test-ÅÑŚÌβŁÈ Collections Input')
+
+
+@pytest.fixture
+def collection_input(tmp_path_factory, collection_path_suffix):
+    """Create a collection skeleton directory for build tests."""
+    test_dir = to_text(tmp_path_factory.mktemp(collection_path_suffix))
+
     namespace = 'ansible_namespace'
     collection = 'collection'
     skeleton = os.path.join(os.path.dirname(os.path.split(__file__)[0]), 'cli', 'test_data', 'collection_skeleton')
@@ -467,6 +472,14 @@ def test_build_existing_output_without_force(collection_input):
         collection.build_collection(to_text(input_dir, errors='surrogate_or_strict'), to_text(output_dir, errors='surrogate_or_strict'), False)
 
 
+@pytest.mark.parametrize(
+    'collection_path_suffix',
+    (
+        'test-ÅÑŚÌβŁÈ Collections Input 1 with_slash/',
+        'test-ÅÑŚÌβŁÈ Collections Input 2 no slash',
+    ),
+    indirect=('collection_path_suffix', ),
+)
 def test_build_existing_output_with_force(collection_input):
     input_dir, output_dir = collection_input
 
@@ -824,7 +837,7 @@ def test_build_with_symlink_inside_collection(collection_input):
         actual_file = secure_hash_s(linked_file_obj.read())
         linked_file_obj.close()
 
-        assert actual_file == '63444bfc766154e1bc7557ef6280de20d03fcd81'
+        assert actual_file == '08f24200b9fbe18903e7a50930c9d0df0b8d7da3'  # shasum test/units/cli/test_data/collection_skeleton/README.md
 
 
 def test_publish_no_wait(galaxy_server, collection_artifact, monkeypatch):

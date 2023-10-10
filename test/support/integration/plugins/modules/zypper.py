@@ -13,8 +13,7 @@
 #
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-from __future__ import absolute_import, division, print_function
-__metaclass__ = type
+from __future__ import annotations
 
 
 ANSIBLE_METADATA = {'metadata_version': '1.1',
@@ -41,7 +40,7 @@ options:
         - Package name C(name) or package specifier or a list of either.
         - Can include a version like C(name=1.0), C(name>3.4) or C(name<=2.7). If a version is given, C(oldpackage) is implied and zypper is allowed to
           update the package within the version range given.
-        - You can also pass a url or a local path to a rpm file.
+        - You can also pass a url or a local path to an rpm file.
         - When using state=latest, this can be '*', which updates all installed packages.
         required: true
         aliases: [ 'pkg' ]

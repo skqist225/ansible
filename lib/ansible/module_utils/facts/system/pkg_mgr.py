@@ -2,8 +2,7 @@
 
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-from __future__ import (absolute_import, division, print_function)
-__metaclass__ = type
+from __future__ import annotations
 
 import os
 import subprocess
@@ -85,14 +84,19 @@ class PkgMgrFactCollector(BaseFactCollector):
                 break
 
         try:
-            distro_major_ver = int(collected_facts['ansible_distribution_major_version'])
+            major_version = collected_facts['ansible_distribution_major_version']
+            if collected_facts['ansible_distribution'] == 'Kylin Linux Advanced Server':
+                major_version = major_version.lstrip('V')
+            distro_major_ver = int(major_version)
         except ValueError:
             # a non integer magical future version
             return self._default_unknown_pkg_mgr
 
         if (
             (collected_facts['ansible_distribution'] == 'Fedora' and distro_major_ver < 23)
+            or (collected_facts['ansible_distribution'] == 'Kylin Linux Advanced Server' and distro_major_ver < 10)
             or (collected_facts['ansible_distribution'] == 'Amazon' and distro_major_ver < 2022)
+            or (collected_facts['ansible_distribution'] == 'TencentOS' and distro_major_ver < 3)
             or distro_major_ver < 8  # assume RHEL or a clone
         ) and any(pm for pm in PKG_MGRS if pm['name'] == 'yum' and os.path.exists(pm['path'])):
             pkg_mgr_name = 'yum'

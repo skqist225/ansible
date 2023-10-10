@@ -2,8 +2,7 @@
 # Copyright (c) 2017 Ansible Project
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-from __future__ import (absolute_import, division, print_function)
-__metaclass__ = type
+from __future__ import annotations
 
 DOCUMENTATION = '''
     name: script
@@ -28,6 +27,8 @@ DOCUMENTATION = '''
     notes:
         - Enabled in configuration by default.
         - The plugin does not cache results because external inventory scripts are responsible for their own caching.
+        - To write your own inventory script see (R(Developing dynamic inventory,developing_inventory) from the documentation site.
+        - To find the scripts that used to be part of the code release, go to U(https://github.com/ansible-community/contrib-scripts/).
 '''
 
 import os

@@ -1,10 +1,8 @@
 # (c) 2012-2014, Michael DeHaan <michael.dehaan@gmail.com>
 # (c) 2017 Ansible Project
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
-from __future__ import (absolute_import, division, print_function)
-__metaclass__ = type
+from __future__ import annotations
 
-import multiprocessing
 import random
 import re
 import string
@@ -42,8 +40,6 @@ except Exception as e:
 display = Display()
 
 __all__ = ['do_encrypt']
-
-_LOCK = multiprocessing.Lock()
 
 DEFAULT_PASSWORD_LENGTH = 20
 
@@ -105,7 +101,7 @@ class CryptHash(BaseHash):
             "Python crypt module is deprecated and will be removed from "
             "Python 3.13. Install the passlib library for continued "
             "encryption functionality.",
-            version=2.17
+            version="2.17",
         )
 
         self.algo_data = self.algorithms[algorithm]
@@ -128,7 +124,10 @@ class CryptHash(BaseHash):
         return ret
 
     def _rounds(self, rounds):
-        if rounds == self.algo_data.implicit_rounds:
+        if self.algorithm == 'bcrypt':
+            # crypt requires 2 digits for rounds
+            return rounds or self.algo_data.implicit_rounds
+        elif rounds == self.algo_data.implicit_rounds:
             # Passlib does not include the rounds if it is the same as implicit_rounds.
             # Make crypt lib behave the same, by not explicitly specifying the rounds in that case.
             return None
@@ -148,12 +147,14 @@ class CryptHash(BaseHash):
             saltstring = "$%s" % ident
 
         if rounds:
-            saltstring += "$rounds=%d" % rounds
+            if self.algorithm == 'bcrypt':
+                saltstring += "$%d" % rounds
+            else:
+                saltstring += "$rounds=%d" % rounds
 
         saltstring += "$%s" % salt
 
-        # crypt.crypt on Python < 3.9 returns None if it cannot parse saltstring
-        # On Python >= 3.9, it throws OSError.
+        # crypt.crypt throws OSError on Python >= 3.9 if it cannot parse saltstring.
         try:
             result = crypt.crypt(secret, saltstring)
             orig_exc = None
@@ -161,7 +162,7 @@ class CryptHash(BaseHash):
             result = None
             orig_exc = e
 
-        # None as result would be interpreted by the some modules (user module)
+        # None as result would be interpreted by some modules (user module)
         # as no password at all.
         if not result:
             raise AnsibleError(
@@ -178,6 +179,7 @@ class PasslibHash(BaseHash):
 
         if not PASSLIB_AVAILABLE:
             raise AnsibleError("passlib must be installed and usable to hash with '%s'" % algorithm, orig_exc=PASSLIB_E)
+        display.vv("Using passlib to hash input with '%s'" % algorithm)
 
         try:
             self.crypt_algo = getattr(passlib.hash, algorithm)
@@ -264,12 +266,13 @@ class PasslibHash(BaseHash):
 
 
 def passlib_or_crypt(secret, algorithm, salt=None, salt_size=None, rounds=None, ident=None):
+    display.deprecated("passlib_or_crypt API is deprecated in favor of do_encrypt", version='2.20')
+    return do_encrypt(secret, algorithm, salt=salt, salt_size=salt_size, rounds=rounds, ident=ident)
+
+
+def do_encrypt(result, encrypt, salt_size=None, salt=None, ident=None, rounds=None):
     if PASSLIB_AVAILABLE:
-        return PasslibHash(algorithm).hash(secret, salt=salt, salt_size=salt_size, rounds=rounds, ident=ident)
+        return PasslibHash(encrypt).hash(result, salt=salt, salt_size=salt_size, rounds=rounds, ident=ident)
     if HAS_CRYPT:
-        return CryptHash(algorithm).hash(secret, salt=salt, salt_size=salt_size, rounds=rounds, ident=ident)
+        return CryptHash(encrypt).hash(result, salt=salt, salt_size=salt_size, rounds=rounds, ident=ident)
     raise AnsibleError("Unable to encrypt nor hash, either crypt or passlib must be installed.", orig_exc=CRYPT_E)
-
-
-def do_encrypt(result, encrypt, salt_size=None, salt=None, ident=None):
-    return passlib_or_crypt(result, encrypt, salt_size=salt_size, salt=salt, ident=ident)

@@ -2,9 +2,7 @@
 # Copyright: (c) 2019, Ansible Project
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-# Make coding more python3-ish
-from __future__ import (absolute_import, division, print_function)
-__metaclass__ = type
+from __future__ import annotations
 
 import copy
 import json
@@ -296,6 +294,27 @@ def test_build_requirement_from_tar(collection_artifact):
     assert actual.name == u'collection'
     assert actual.src == to_text(collection_artifact[1])
     assert actual.ver == u'0.1.0'
+
+
+def test_build_requirement_from_tar_url(tmp_path_factory):
+    test_dir = to_bytes(tmp_path_factory.mktemp('test-ÅÑŚÌβŁÈ Collections Input'))
+    concrete_artifact_cm = collection.concrete_artifact_manager.ConcreteArtifactsManager(test_dir, validate_certs=False)
+    test_url = 'https://example.com/org/repo/sample.tar.gz'
+    expected = fr"^Failed to download collection tar from '{to_text(test_url)}'"
+
+    with pytest.raises(AnsibleError, match=expected):
+        Requirement.from_requirement_dict({'name': test_url, 'type': 'url'}, concrete_artifact_cm)
+
+
+def test_build_requirement_from_tar_url_wrong_type(tmp_path_factory):
+    test_dir = to_bytes(tmp_path_factory.mktemp('test-ÅÑŚÌβŁÈ Collections Input'))
+    concrete_artifact_cm = collection.concrete_artifact_manager.ConcreteArtifactsManager(test_dir, validate_certs=False)
+    test_url = 'https://example.com/org/repo/sample.tar.gz'
+    expected = fr"^Unable to find collection artifact file at '{to_text(test_url)}'\.$"
+
+    with pytest.raises(AnsibleError, match=expected):
+        # Specified wrong collection type for http URL
+        Requirement.from_requirement_dict({'name': test_url, 'type': 'file'}, concrete_artifact_cm)
 
 
 def test_build_requirement_from_tar_fail_not_tar(tmp_path_factory):
@@ -822,7 +841,8 @@ def test_install_collections_from_tar(collection_artifact, monkeypatch):
     concrete_artifact_cm = collection.concrete_artifact_manager.ConcreteArtifactsManager(temp_path, validate_certs=False)
 
     requirements = [Requirement('ansible_namespace.collection', '0.1.0', to_text(collection_tar), 'file', None)]
-    collection.install_collections(requirements, to_text(temp_path), [], False, False, False, False, False, False, concrete_artifact_cm, True, False)
+    collection.install_collections(
+        requirements, to_text(temp_path), [], False, False, False, False, False, False, concrete_artifact_cm, True, False, set())
 
     assert os.path.isdir(collection_path)
 
@@ -860,7 +880,8 @@ def test_install_collection_with_circular_dependency(collection_artifact, monkey
 
     concrete_artifact_cm = collection.concrete_artifact_manager.ConcreteArtifactsManager(temp_path, validate_certs=False)
     requirements = [Requirement('ansible_namespace.collection', '0.1.0', to_text(collection_tar), 'file', None)]
-    collection.install_collections(requirements, to_text(temp_path), [], False, False, False, False, False, False, concrete_artifact_cm, True, False)
+    collection.install_collections(
+        requirements, to_text(temp_path), [], False, False, False, False, False, False, concrete_artifact_cm, True, False, set())
 
     assert os.path.isdir(collection_path)
 
@@ -897,7 +918,8 @@ def test_install_collection_with_no_dependency(collection_artifact, monkeypatch)
 
     concrete_artifact_cm = collection.concrete_artifact_manager.ConcreteArtifactsManager(temp_path, validate_certs=False)
     requirements = [Requirement('ansible_namespace.collection', '0.1.0', to_text(collection_tar), 'file', None)]
-    collection.install_collections(requirements, to_text(temp_path), [], False, False, False, False, False, False, concrete_artifact_cm, True, False)
+    collection.install_collections(
+        requirements, to_text(temp_path), [], False, False, False, False, False, False, concrete_artifact_cm, True, False, set())
 
     assert os.path.isdir(collection_path)
 

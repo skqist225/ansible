@@ -17,9 +17,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
-# Make coding more python3-ish
-from __future__ import (absolute_import, division, print_function)
-__metaclass__ = type
+from __future__ import annotations
 
 from ansible import constants as C
 from ansible import context
@@ -119,7 +117,7 @@ class PlayContext(Base):
     def verbosity(self):
         display.deprecated(
             "PlayContext.verbosity is deprecated, use ansible.utils.display.Display.verbosity instead.",
-            version=2.18
+            version="2.18"
         )
         return self._internal_verbosity
 
@@ -127,7 +125,7 @@ class PlayContext(Base):
     def verbosity(self, value):
         display.deprecated(
             "PlayContext.verbosity is deprecated, use ansible.utils.display.Display.verbosity instead.",
-            version=2.18
+            version="2.18"
         )
         self._internal_verbosity = value
 

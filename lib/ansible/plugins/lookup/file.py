@@ -1,8 +1,7 @@
 # (c) 2012, Daniel Hokka Zakrisson <daniel@hozac.com>
 # (c) 2017 Ansible Project
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
-from __future__ import (absolute_import, division, print_function)
-__metaclass__ = type
+from __future__ import annotations
 
 DOCUMENTATION = """
     name: file
@@ -35,7 +34,7 @@ DOCUMENTATION = """
 
 EXAMPLES = """
 - ansible.builtin.debug:
-    msg: "the value of foo.txt is {{lookup('ansible.builtin.file', '/etc/foo.txt') }}"
+    msg: "the value of foo.txt is {{ lookup('ansible.builtin.file', '/etc/foo.txt') }}"
 
 - name: display multiple file contents
   ansible.builtin.debug: var=item

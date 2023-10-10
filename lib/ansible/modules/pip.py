@@ -3,8 +3,7 @@
 # Copyright: (c) 2012, Matt Wright <matt@nobien.net>
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-from __future__ import absolute_import, division, print_function
-__metaclass__ = type
+from __future__ import annotations
 
 
 DOCUMENTATION = '''
@@ -12,8 +11,8 @@ DOCUMENTATION = '''
 module: pip
 short_description: Manages Python library dependencies
 description:
-     - "Manage Python library dependencies. To use this module, one of the following keys is required: C(name)
-       or C(requirements)."
+     - "Manage Python library dependencies. To use this module, one of the following keys is required: O(name)
+       or O(requirements)."
 version_added: "0.7"
 options:
   name:
@@ -24,7 +23,7 @@ options:
     elements: str
   version:
     description:
-      - The version number to install of the Python library specified in the I(name) parameter.
+      - The version number to install of the Python library specified in the O(name) parameter.
     type: str
   requirements:
     description:
@@ -53,17 +52,17 @@ options:
   virtualenv_command:
     description:
       - The command or a pathname to the command to create the virtual
-        environment with. For example C(pyvenv), C(virtualenv),
-        C(virtualenv2), C(~/bin/virtualenv), C(/usr/local/bin/virtualenv).
+        environment with. For example V(pyvenv), V(virtualenv),
+        V(virtualenv2), V(~/bin/virtualenv), V(/usr/local/bin/virtualenv).
     type: path
     default: virtualenv
     version_added: "1.1"
   virtualenv_python:
     description:
       - The Python executable used for creating the virtual environment.
-        For example C(python3.12), C(python2.7). When not specified, the
+        For example V(python3.12), V(python2.7). When not specified, the
         Python version used to run the ansible module is used. This parameter
-        should not be used when C(virtualenv_command) is using C(pyvenv) or
+        should not be used when O(virtualenv_command) is using V(pyvenv) or
         the C(-m venv) module.
     type: str
     version_added: "2.0"
@@ -94,9 +93,9 @@ options:
     description:
       - The explicit executable or pathname for the pip executable,
         if different from the Ansible Python interpreter. For
-        example C(pip3.3), if there are both Python 2.7 and 3.3 installations
+        example V(pip3.3), if there are both Python 2.7 and 3.3 installations
         in the system and you want to run pip for the Python 3.3 installation.
-      - Mutually exclusive with I(virtualenv) (added in 2.1).
+      - Mutually exclusive with O(virtualenv) (added in 2.1).
       - Does not affect the Ansible Python interpreter.
       - The setuptools package must be installed for both the Ansible Python interpreter
         and for the version of Python specified by this option.
@@ -125,16 +124,16 @@ notes:
      installed on the remote host if the virtualenv parameter is specified and
      the virtualenv needs to be created.
    - Although it executes using the Ansible Python interpreter, the pip module shells out to
-     run the actual pip command, so it can use any pip version you specify with I(executable).
+     run the actual pip command, so it can use any pip version you specify with O(executable).
      By default, it uses the pip version for the Ansible Python interpreter. For example, pip3 on python 3, and pip2 or pip on python 2.
    - The interpreter used by Ansible
      (see R(ansible_python_interpreter, ansible_python_interpreter))
      requires the setuptools package, regardless of the version of pip set with
-     the I(executable) option.
+     the O(executable) option.
 requirements:
 - pip
 - virtualenv
-- setuptools
+- setuptools or packaging
 author:
 - Matt Wright (@mattupstate)
 '''
@@ -275,14 +274,23 @@ import traceback
 
 from ansible.module_utils.compat.version import LooseVersion
 
-SETUPTOOLS_IMP_ERR = None
+PACKAGING_IMP_ERR = None
+HAS_PACKAGING = False
+HAS_SETUPTOOLS = False
 try:
-    from pkg_resources import Requirement
-
-    HAS_SETUPTOOLS = True
-except ImportError:
-    HAS_SETUPTOOLS = False
-    SETUPTOOLS_IMP_ERR = traceback.format_exc()
+    from packaging.requirements import Requirement as parse_requirement
+    HAS_PACKAGING = True
+except Exception:
+    # This is catching a generic Exception, due to packaging on EL7 raising a TypeError on import
+    HAS_PACKAGING = False
+    PACKAGING_IMP_ERR = traceback.format_exc()
+    try:
+        from pkg_resources import Requirement
+        parse_requirement = Requirement.parse  # type: ignore[misc,assignment]
+        del Requirement
+        HAS_SETUPTOOLS = True
+    except ImportError:
+        pass
 
 from ansible.module_utils.common.text.converters import to_native
 from ansible.module_utils.basic import AnsibleModule, is_executable, missing_required_lib
@@ -293,8 +301,16 @@ from ansible.module_utils.six import PY3
 #: Python one-liners to be run at the command line that will determine the
 # installed version for these special libraries.  These are libraries that
 # don't end up in the output of pip freeze.
-_SPECIAL_PACKAGE_CHECKERS = {'setuptools': 'import setuptools; print(setuptools.__version__)',
-                             'pip': 'import pkg_resources; print(pkg_resources.get_distribution("pip").version)'}
+_SPECIAL_PACKAGE_CHECKERS = {
+    'importlib': {
+        'setuptools': 'from importlib.metadata import version; print(version("setuptools"))',
+        'pip': 'from importlib.metadata import version; print(version("pip"))',
+    },
+    'pkg_resources': {
+        'setuptools': 'import setuptools; print(setuptools.__version__)',
+        'pip': 'import pkg_resources; print(pkg_resources.get_distribution("pip").version)',
+    }
+}
 
 _VCS_RE = re.compile(r'(svn|git|hg|bzr)\+')
 
@@ -503,7 +519,7 @@ def _fail(module, cmd, out, err):
     module.fail_json(cmd=cmd, msg=msg)
 
 
-def _get_package_info(module, package, env=None):
+def _get_package_info(module, package, python_bin=None):
     """This is only needed for special packages which do not show up in pip freeze
 
     pip and setuptools fall into this category.
@@ -511,20 +527,19 @@ def _get_package_info(module, package, env=None):
     :returns: a string containing the version number if the package is
         installed.  None if the package is not installed.
     """
-    if env:
-        opt_dirs = ['%s/bin' % env]
-    else:
-        opt_dirs = []
-    python_bin = module.get_bin_path('python', False, opt_dirs)
-
     if python_bin is None:
+        return
+
+    discovery_mechanism = 'pkg_resources'
+    importlib_rc = module.run_command([python_bin, '-c', 'import importlib.metadata'])[0]
+    if importlib_rc == 0:
+        discovery_mechanism = 'importlib'
+
+    rc, out, err = module.run_command([python_bin, '-c', _SPECIAL_PACKAGE_CHECKERS[discovery_mechanism][package]])
+    if rc:
         formatted_dep = None
     else:
-        rc, out, err = module.run_command([python_bin, '-c', _SPECIAL_PACKAGE_CHECKERS[package]])
-        if rc:
-            formatted_dep = None
-        else:
-            formatted_dep = '%s==%s' % (package, out.strip())
+        formatted_dep = '%s==%s' % (package, out.strip())
     return formatted_dep
 
 
@@ -602,13 +617,15 @@ class Package:
             separator = '==' if version_string[0].isdigit() else ' '
             name_string = separator.join((name_string, version_string))
         try:
-            self._requirement = Requirement.parse(name_string)
+            self._requirement = parse_requirement(name_string)
             # old pkg_resource will replace 'setuptools' with 'distribute' when it's already installed
-            if self._requirement.project_name == "distribute" and "setuptools" in name_string:
+            project_name = Package.canonicalize_name(
+                getattr(self._requirement, 'name', None) or getattr(self._requirement, 'project_name', None)
+            )
+            if project_name == "distribute" and "setuptools" in name_string:
                 self.package_name = "setuptools"
-                self._requirement.project_name = "setuptools"
             else:
-                self.package_name = Package.canonicalize_name(self._requirement.project_name)
+                self.package_name = project_name
             self._plain_package = True
         except ValueError as e:
             pass
@@ -616,7 +633,7 @@ class Package:
     @property
     def has_version_specifier(self):
         if self._plain_package:
-            return bool(self._requirement.specs)
+            return bool(getattr(self._requirement, 'specifier', None) or getattr(self._requirement, 'specs', None))
         return False
 
     def is_satisfied_by(self, version_to_test):
@@ -672,9 +689,9 @@ def main():
         supports_check_mode=True,
     )
 
-    if not HAS_SETUPTOOLS:
-        module.fail_json(msg=missing_required_lib("setuptools"),
-                         exception=SETUPTOOLS_IMP_ERR)
+    if not HAS_SETUPTOOLS and not HAS_PACKAGING:
+        module.fail_json(msg=missing_required_lib("packaging"),
+                         exception=PACKAGING_IMP_ERR)
 
     state = module.params['state']
     name = module.params['name']
@@ -714,6 +731,9 @@ def main():
             if not os.path.exists(os.path.join(env, 'bin', 'activate')):
                 venv_created = True
                 out, err = setup_virtualenv(module, env, chdir, out, err)
+            py_bin = os.path.join(env, 'bin', 'python')
+        else:
+            py_bin = module.params['executable'] or sys.executable
 
         pip = _get_pip(module, env, module.params['executable'])
 
@@ -796,7 +816,7 @@ def main():
                     # So we need to get those via a specialcase
                     for pkg in ('setuptools', 'pip'):
                         if pkg in name:
-                            formatted_dep = _get_package_info(module, pkg, env)
+                            formatted_dep = _get_package_info(module, pkg, py_bin)
                             if formatted_dep is not None:
                                 pkg_list.append(formatted_dep)
                                 out += '%s\n' % formatted_dep

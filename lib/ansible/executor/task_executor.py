@@ -1,8 +1,7 @@
 # (c) 2012-2014, Michael DeHaan <michael.dehaan@gmail.com>
 # (c) 2017 Ansible Project
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
-from __future__ import (absolute_import, division, print_function)
-__metaclass__ = type
+from __future__ import annotations
 
 import os
 import pty
@@ -224,14 +223,11 @@ class TaskExecutor:
         items = None
         if self._task.loop_with:
             if self._task.loop_with in self._shared_loader_obj.lookup_loader:
-                fail = True
-                if self._task.loop_with == 'first_found':
-                    # first_found loops are special. If the item is undefined then we want to fall through to the next value rather than failing.
-                    fail = False
 
+                # TODO: hardcoded so it fails for non first_found lookups, but thhis shoudl be generalized for those that don't do their own templating
+                # lookup prop/attribute?
+                fail = bool(self._task.loop_with != 'first_found')
                 loop_terms = listify_lookup_plugin_terms(terms=self._task.loop, templar=templar, fail_on_undefined=fail, convert_bare=False)
-                if not fail:
-                    loop_terms = [t for t in loop_terms if not templar.is_template(t)]
 
                 # get lookup
                 mylookup = self._shared_loader_obj.lookup_loader.get(self._task.loop_with, loader=self._loader, templar=templar)
@@ -598,9 +594,9 @@ class TaskExecutor:
         # feed back into pc to ensure plugins not using get_option can get correct value
         self._connection._play_context = self._play_context.set_task_and_variable_override(task=self._task, variables=vars_copy, templar=templar)
 
-        # TODO: eventually remove this block as this should be a 'consequence' of 'forced_local' modules
+        # TODO: eventually remove this block as this should be a 'consequence' of 'forced_local' modules, right now rely on remote_is_local connection
         # special handling for python interpreter for network_os, default to ansible python unless overridden
-        if 'ansible_network_os' in cvars and 'ansible_python_interpreter' not in cvars:
+        if 'ansible_python_interpreter' not in cvars and 'ansible_network_os' in cvars and getattr(self._connection, '_remote_is_local', False):
             # this also avoids 'python discovery'
             cvars['ansible_python_interpreter'] = sys.executable
 
@@ -623,17 +619,11 @@ class TaskExecutor:
         if omit_token is not None:
             self._task.args = remove_omit(self._task.args, omit_token)
 
-        # Read some values from the task, so that we can modify them if need be
-        if self._task.until:
-            retries = self._task.retries
-            if retries is None:
-                retries = 3
-            elif retries <= 0:
-                retries = 1
-            else:
-                retries += 1
-        else:
-            retries = 1
+        retries = 1  # includes the default actual run + retries set by user/default
+        if self._task.retries is not None:
+            retries += max(0, self._task.retries)
+        elif self._task.until:
+            retries += 3  # the default is not set in FA because we need to differentiate "unset" value
 
         delay = self._task.delay
         if delay < 0:
@@ -739,7 +729,7 @@ class TaskExecutor:
                     result['failed'] = False
 
             # Make attempts and retries available early to allow their use in changed/failed_when
-            if self._task.until:
+            if retries > 1:
                 result['attempts'] = attempt
 
             # set the changed property if it was missing.
@@ -771,7 +761,7 @@ class TaskExecutor:
 
             if retries > 1:
                 cond = Conditional(loader=self._loader)
-                cond.when = self._task.until
+                cond.when = self._task.until or [not result['failed']]
                 if cond.evaluate_conditional(templar, vars_copy):
                     break
                 else:

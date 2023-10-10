@@ -1,8 +1,7 @@
 # (c) 2013, Jan-Piet Mens <jpmens(at)gmail.com>
 # (c) 2017 Ansible Project
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
-from __future__ import (absolute_import, division, print_function)
-__metaclass__ = type
+from __future__ import annotations
 
 DOCUMENTATION = r"""
     name: csvfile
@@ -12,7 +11,7 @@ DOCUMENTATION = r"""
     description:
       - The csvfile lookup reads the contents of a file in CSV (comma-separated value) format.
         The lookup looks for the row where the first column matches keyname (which can be multiple words)
-        and returns the value in the C(col) column (default 1, which indexed from 0 means the second column in the file).
+        and returns the value in the O(col) column (default 1, which indexed from 0 means the second column in the file).
     options:
       col:
         description:  column to return (0 indexed).
@@ -20,7 +19,7 @@ DOCUMENTATION = r"""
       default:
         description: what to return if the value is not found in the file.
       delimiter:
-        description: field separator in the file, for a tab you can specify C(TAB) or C(\t).
+        description: field separator in the file, for a tab you can specify V(TAB) or V(\\t).
         default: TAB
       file:
         description: name of the CSV/TSV file to open.
@@ -57,7 +56,7 @@ EXAMPLES = """
     neighbor_as: "{{ csvline[5] }}"
     neigh_int_ip: "{{ csvline[6] }}"
   vars:
-    csvline = "{{ lookup('ansible.builtin.csvfile', bgp_neighbor_ip, file='bgp_neighbors.csv', delimiter=',') }}"
+    csvline: "{{ lookup('ansible.builtin.csvfile', bgp_neighbor_ip, file='bgp_neighbors.csv', delimiter=',') }}"
   delegate_to: localhost
 """
 
