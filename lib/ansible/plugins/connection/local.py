@@ -21,13 +21,13 @@ import fcntl
 import getpass
 import os
 import pty
+import selectors
 import shutil
 import subprocess
 import typing as t
 
 import ansible.constants as C
 from ansible.errors import AnsibleError, AnsibleFileNotFound
-from ansible.module_utils.compat import selectors
 from ansible.module_utils.six import text_type, binary_type
 from ansible.module_utils.common.text.converters import to_bytes, to_native, to_text
 from ansible.plugins.connection import ConnectionBase
@@ -89,7 +89,7 @@ class Connection(ConnectionBase):
         master = None
         stdin = subprocess.PIPE
         if sudoable and self.become and self.become.expect_prompt() and not self.get_option('pipelining'):
-            # Create a pty if sudoable for privlege escalation that needs it.
+            # Create a pty if sudoable for privilege escalation that needs it.
             # Falls back to using a standard pipe if this fails, which may
             # cause the command to fail in certain situations where we are escalating
             # privileges or the command otherwise needs a pty.

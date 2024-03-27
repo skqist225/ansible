@@ -10,7 +10,6 @@ import pytest
 
 from ansible.config.manager import ConfigManager, ensure_type, resolve_path, get_config_type
 from ansible.errors import AnsibleOptionsError, AnsibleError
-from ansible.module_utils.six import integer_types, string_types
 from ansible.parsing.yaml.objects import AnsibleVaultEncryptedUnicode
 
 curdir = os.path.dirname(__file__)
@@ -39,38 +38,38 @@ ensure_test_data = [
     (0, 'bool', bool),
     (0.0, 'bool', bool),
     (False, 'bool', bool),
-    ('10', 'int', integer_types),
-    (20, 'int', integer_types),
+    ('10', 'int', int),
+    (20, 'int', int),
     ('0.10', 'float', float),
     (0.2, 'float', float),
     ('/tmp/test.yml', 'pathspec', list),
     ('/tmp/test.yml,/home/test2.yml', 'pathlist', list),
-    ('a', 'str', string_types),
-    ('a', 'string', string_types),
-    ('Café', 'string', string_types),
-    ('', 'string', string_types),
-    ('29', 'str', string_types),
-    ('13.37', 'str', string_types),
-    ('123j', 'string', string_types),
-    ('0x123', 'string', string_types),
-    ('true', 'string', string_types),
-    ('True', 'string', string_types),
-    (0, 'str', string_types),
-    (29, 'str', string_types),
-    (13.37, 'str', string_types),
-    (123j, 'string', string_types),
-    (0x123, 'string', string_types),
-    (True, 'string', string_types),
+    ('a', 'str', str),
+    ('a', 'string', str),
+    ('Café', 'string', str),
+    ('', 'string', str),
+    ('29', 'str', str),
+    ('13.37', 'str', str),
+    ('123j', 'string', str),
+    ('0x123', 'string', str),
+    ('true', 'string', str),
+    ('True', 'string', str),
+    (0, 'str', str),
+    (29, 'str', str),
+    (13.37, 'str', str),
+    (123j, 'string', str),
+    (0x123, 'string', str),
+    (True, 'string', str),
     ('None', 'none', type(None))
 ]
 
 ensure_unquoting_test_data = [
-    ('"value"', '"value"', 'str', 'env'),
-    ('"value"', '"value"', 'str', 'yaml'),
-    ('"value"', 'value', 'str', 'ini'),
-    ('\'value\'', 'value', 'str', 'ini'),
-    ('\'\'value\'\'', '\'value\'', 'str', 'ini'),
-    ('""value""', '"value"', 'str', 'ini')
+    ('"value"', '"value"', 'str', 'env: ENVVAR', None),
+    ('"value"', '"value"', 'str', os.path.join(curdir, 'test.yml'), 'yaml'),
+    ('"value"', 'value', 'str', cfg_file, 'ini'),
+    ('\'value\'', 'value', 'str', cfg_file, 'ini'),
+    ('\'\'value\'\'', '\'value\'', 'str', cfg_file, 'ini'),
+    ('""value""', '"value"', 'str', cfg_file, 'ini')
 ]
 
 
@@ -87,9 +86,9 @@ class TestConfigManager:
     def test_ensure_type(self, value, expected_type, python_type):
         assert isinstance(ensure_type(value, expected_type), python_type)
 
-    @pytest.mark.parametrize("value, expected_value, value_type, origin", ensure_unquoting_test_data)
-    def test_ensure_type_unquoting(self, value, expected_value, value_type, origin):
-        actual_value = ensure_type(value, value_type, origin)
+    @pytest.mark.parametrize("value, expected_value, value_type, origin, origin_ftype", ensure_unquoting_test_data)
+    def test_ensure_type_unquoting(self, value, expected_value, value_type, origin, origin_ftype):
+        actual_value = ensure_type(value, value_type, origin, origin_ftype)
         assert actual_value == expected_value
 
     def test_resolve_path(self):

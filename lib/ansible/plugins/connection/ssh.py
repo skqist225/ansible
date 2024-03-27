@@ -19,6 +19,8 @@ DOCUMENTATION = '''
         - connection_pipelining
     version_added: historical
     notes:
+        - This plugin is mostly a wrapper to the ``ssh`` CLI utility and the exact behavior of the options depends on this tool.
+          This means that the documentation provided here is subject to be overridden by the CLI tool itself.
         - Many options default to V(None) here but that only means we do not override the SSH tool's defaults and/or configuration.
           For example, if you specify the port in this plugin it will override any C(Port) entry in your C(.ssh/config).
         - The ssh CLI tool uses return code 255 as a 'connection error', this can conflict with commands/tools that
@@ -35,7 +37,7 @@ DOCUMENTATION = '''
                - name: delegated_vars['ansible_host']
                - name: delegated_vars['ansible_ssh_host']
       host_key_checking:
-          description: Determines if SSH should check host keys.
+          description: Determines if SSH should reject or not a connection after checking host keys.
           default: True
           type: boolean
           ini:
@@ -303,12 +305,13 @@ DOCUMENTATION = '''
           - name: ansible_sftp_batch_mode
             version_added: '2.7'
       ssh_transfer_method:
-        description:
-            - "Preferred method to use when transferring files over ssh"
-            - Setting to 'smart' (default) will try them in order, until one succeeds or they all fail
-            - For OpenSSH >=9.0 you must add an additional option to enable scp (scp_extra_args="-O")
-            - Using 'piped' creates an ssh pipe with C(dd) on either side to copy the data
-        choices: ['sftp', 'scp', 'piped', 'smart']
+        description: Preferred method to use when transferring files over ssh
+        choices:
+              sftp: This is the most reliable way to copy things with SSH.
+              scp: Deprecated in OpenSSH. For OpenSSH >=9.0 you must add an additional option to enable scp C(scp_extra_args="-O").
+              piped: Creates an SSH pipe with C(dd) on either side to copy the data.
+              smart: Tries each method in order (sftp > scp > piped), until one succeeds or they all fail.
+        default: smart
         type: string
         env: [{name: ANSIBLE_SSH_TRANSFER_METHOD}]
         ini:
@@ -316,24 +319,6 @@ DOCUMENTATION = '''
         vars:
             - name: ansible_ssh_transfer_method
               version_added: '2.12'
-      scp_if_ssh:
-        deprecated:
-              why: In favor of the O(ssh_transfer_method) option.
-              version: "2.17"
-              alternatives: O(ssh_transfer_method)
-        default: smart
-        description:
-          - "Preferred method to use when transferring files over SSH."
-          - When set to V(smart), Ansible will try them until one succeeds or they all fail.
-          - If set to V(True), it will force 'scp', if V(False) it will use 'sftp'.
-          - For OpenSSH >=9.0 you must add an additional option to enable scp (C(scp_extra_args="-O"))
-          - This setting will overridden by O(ssh_transfer_method) if set.
-        env: [{name: ANSIBLE_SCP_IF_SSH}]
-        ini:
-        - {key: scp_if_ssh, section: ssh_connection}
-        vars:
-          - name: ansible_scp_if_ssh
-            version_added: '2.7'
       use_tty:
         version_added: '2.5'
         default: true
@@ -388,6 +373,7 @@ import io
 import os
 import pty
 import re
+import selectors
 import shlex
 import subprocess
 import time
@@ -400,11 +386,8 @@ from ansible.errors import (
     AnsibleError,
     AnsibleFileNotFound,
 )
-from ansible.errors import AnsibleOptionsError
-from ansible.module_utils.compat import selectors
 from ansible.module_utils.six import PY3, text_type, binary_type
 from ansible.module_utils.common.text.converters import to_bytes, to_native, to_text
-from ansible.module_utils.parsing.convert_bool import BOOLEANS, boolean
 from ansible.plugins.connection import ConnectionBase, BUFSIZE
 from ansible.plugins.shell.powershell import _parse_clixml
 from ansible.utils.display import Display
@@ -745,8 +728,8 @@ class Connection(ConnectionBase):
                 self._add_args(b_command, b_args, u'disable batch mode for sshpass')
             b_command += [b'-b', b'-']
 
-        if display.verbosity > 3:
-            b_command.append(b'-vvv')
+        if display.verbosity:
+            b_command.append(b'-' + (b'v' * display.verbosity))
 
         # Next, we add ssh_args
         ssh_args = self.get_option('ssh_args')
@@ -1239,10 +1222,9 @@ class Connection(ConnectionBase):
         # Transfer methods to try
         methods = []
 
-        # Use the transfer_method option if set, otherwise use scp_if_ssh
+        # Use the transfer_method option if set
         ssh_transfer_method = self.get_option('ssh_transfer_method')
-        scp_if_ssh = self.get_option('scp_if_ssh')
-        if ssh_transfer_method is None and scp_if_ssh == 'smart':
+        if ssh_transfer_method is None:
             ssh_transfer_method = 'smart'
 
         if ssh_transfer_method is not None:
@@ -1250,20 +1232,6 @@ class Connection(ConnectionBase):
                 methods = smart_methods
             else:
                 methods = [ssh_transfer_method]
-        else:
-            # since this can be a non-bool now, we need to handle it correctly
-            if not isinstance(scp_if_ssh, bool):
-                scp_if_ssh = scp_if_ssh.lower()
-                if scp_if_ssh in BOOLEANS:
-                    scp_if_ssh = boolean(scp_if_ssh, strict=False)
-                elif scp_if_ssh != 'smart':
-                    raise AnsibleOptionsError('scp_if_ssh needs to be one of [smart|True|False]')
-            if scp_if_ssh == 'smart':
-                methods = smart_methods
-            elif scp_if_ssh is True:
-                methods = ['scp']
-            else:
-                methods = ['sftp']
 
         for method in methods:
             returncode = stdout = stderr = None

@@ -147,6 +147,7 @@ from jinja2.exceptions import UndefinedError
 from ansible.errors import AnsibleLookupError, AnsibleUndefinedVariable
 from ansible.module_utils.six import string_types
 from ansible.plugins.lookup import LookupBase
+from ansible.utils.path import unfrackpath
 
 
 def _split_on(terms, spliters=','):
@@ -186,7 +187,7 @@ class LookupModule(LookupBase):
             # NOTE: this is used as 'global' but  can be set many times?!?!?
             skip = self.get_option('skip')
 
-            # magic extra spliting to create lists
+            # magic extra splitting to create lists
             filelist = _split_on(files, ',;')
             pathlist = _split_on(paths, ',:;')
 
@@ -197,7 +198,7 @@ class LookupModule(LookupBase):
                         f = os.path.join(path, fn)
                         total_search.append(f)
             elif filelist:
-                # NOTE: this is now 'extend', previouslly it would clobber all options, but we deemed that a bug
+                # NOTE: this is now 'extend', previously it would clobber all options, but we deemed that a bug
                 total_search.extend(filelist)
             else:
                 total_search.append(term)
@@ -206,8 +207,9 @@ class LookupModule(LookupBase):
 
     def run(self, terms, variables, **kwargs):
 
+        self.set_options(var_options=variables, direct=kwargs)
+
         if not terms:
-            self.set_options(var_options=variables, direct=kwargs)
             terms = self.get_option('files')
 
         total_search, skip = self._process_terms(terms, variables, kwargs)
@@ -234,10 +236,10 @@ class LookupModule(LookupBase):
 
             # exit if we find one!
             if path is not None:
-                return [path]
+                return [unfrackpath(path, follow=False)]
 
         # if we get here, no file was found
         if skip:
-            # NOTE: global skip wont matter, only last 'skip' value in dict term
+            # NOTE: global skip won't matter, only last 'skip' value in dict term
             return []
         raise AnsibleLookupError("No file was found when using first_found.")

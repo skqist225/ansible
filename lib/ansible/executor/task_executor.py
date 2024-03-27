@@ -224,7 +224,7 @@ class TaskExecutor:
         if self._task.loop_with:
             if self._task.loop_with in self._shared_loader_obj.lookup_loader:
 
-                # TODO: hardcoded so it fails for non first_found lookups, but thhis shoudl be generalized for those that don't do their own templating
+                # TODO: hardcoded so it fails for non first_found lookups, but this should be generalized for those that don't do their own templating
                 # lookup prop/attribute?
                 fail = bool(self._task.loop_with != 'first_found')
                 loop_terms = listify_lookup_plugin_terms(terms=self._task.loop, templar=templar, fail_on_undefined=fail, convert_bare=False)
@@ -407,11 +407,7 @@ class TaskExecutor:
         """This method is responsible for effectively pre-validating Task.delegate_to and will
         happen before Task.post_validate is executed
         """
-        delegated_vars, delegated_host_name = self._variable_manager.get_delegated_vars_and_hostname(
-            templar,
-            self._task,
-            variables
-        )
+        delegated_vars, delegated_host_name = self._variable_manager.get_delegated_vars_and_hostname(templar, self._task, variables)
         # At the point this is executed it is safe to mutate self._task,
         # since `self._task` is either a copy referred to by `tmp_task` in `_run_loop`
         # or just a singular non-looped task
@@ -844,7 +840,12 @@ class TaskExecutor:
         # that (with a sleep for "poll" seconds between each retry) until the
         # async time limit is exceeded.
 
-        async_task = Task.load(dict(action='async_status', args={'jid': async_jid}, environment=self._task.environment))
+        async_task = Task.load(dict(
+            action='async_status',
+            args={'jid': async_jid},
+            check_mode=self._task.check_mode,
+            environment=self._task.environment,
+        ))
 
         # FIXME: this is no longer the case, normal takes care of all, see if this can just be generalized
         # Because this is an async task, the action handler is async. However,
@@ -916,6 +917,7 @@ class TaskExecutor:
                         'jid': async_jid,
                         'mode': 'cleanup',
                     },
+                    'check_mode': self._task.check_mode,
                     'environment': self._task.environment,
                 }
             )
