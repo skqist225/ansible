@@ -9,7 +9,7 @@ import sys
 
 # Used for determining if the system is running a new enough python version
 # and should only restrict on our documented minimum versions
-_PY_MIN = (3, 7)
+_PY_MIN = (3, 8)
 
 if sys.version_info < _PY_MIN:
     print(json.dumps(dict(
@@ -458,7 +458,7 @@ class AnsibleModule(object):
         self._selinux_mls_enabled = None
         self._selinux_initial_context = None
 
-        # finally, make sure we're in a sane working dir
+        # finally, make sure we're in a logical working dir
         self._set_cwd()
 
     @property
@@ -2054,7 +2054,7 @@ class AnsibleModule(object):
                 # not as exact as above, but should be good enough for most platforms that fail the previous call
                 buffer_size = select.PIPE_BUF
             except Exception:
-                buffer_size = 9000  # use sane default JIC
+                buffer_size = 9000  # use logical default JIC
 
         return buffer_size
 

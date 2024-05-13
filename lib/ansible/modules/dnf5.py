@@ -127,17 +127,19 @@ options:
     type: bool
   enable_plugin:
     description:
-      - This is currently a no-op as dnf5 itself does not implement this feature.
       - I(Plugin) name to enable for the install/update operation.
         The enabled plugin will not persist beyond the transaction.
+      - O(disable_plugin) takes precedence in case a plugin is listed in both O(enable_plugin) and O(disable_plugin).
+      - Requires python3-libdnf5 5.2.0.0+.
     type: list
     elements: str
     default: []
   disable_plugin:
     description:
-      - This is currently a no-op as dnf5 itself does not implement this feature.
       - I(Plugin) name to disable for the install/update operation.
         The disabled plugins will not persist beyond the transaction.
+      - O(disable_plugin) takes precedence in case a plugin is listed in both O(enable_plugin) and O(disable_plugin).
+      - Requires python3-libdnf5 5.2.0.0+.
     type: list
     default: []
     elements: str
@@ -243,7 +245,6 @@ attributes:
     platform:
         platforms: rhel
 requirements:
-  - "python3"
   - "python3-libdnf5"
 version_added: 2.15
 """
@@ -435,6 +436,21 @@ class Dnf5Module(YumDnf):
 
         self.pkg_mgr_name = "dnf5"
 
+    def fail_on_non_existing_plugins(self, base):
+        # https://github.com/rpm-software-management/dnf5/issues/1460
+        plugin_names = [p.get_name() for p in base.get_plugins_info()]
+        msg = []
+        if enable_unmatched := set(self.enable_plugin).difference(plugin_names):
+            msg.append(
+                f"No matches were found for the following plugin name patterns while enabling libdnf5 plugins: {', '.join(enable_unmatched)}."
+            )
+        if disable_unmatched := set(self.disable_plugin).difference(plugin_names):
+            msg.append(
+                f"No matches were found for the following plugin name patterns while disabling libdnf5 plugins: {', '.join(disable_unmatched)}."
+            )
+        if msg:
+            self.module.fail_json(msg=" ".join(msg))
+
     def _ensure_dnf(self):
         locale = get_best_parsable_locale(self.module)
         os.environ["LC_ALL"] = os.environ["LC_MESSAGES"] = locale
@@ -453,7 +469,6 @@ class Dnf5Module(YumDnf):
         system_interpreters = [
             "/usr/libexec/platform-python",
             "/usr/bin/python3",
-            "/usr/bin/python2",
             "/usr/bin/python",
         ]
 
@@ -477,22 +492,9 @@ class Dnf5Module(YumDnf):
         )
 
     def run(self):
-        if sys.version_info.major < 3:
-            self.module.fail_json(
-                msg="The dnf5 module requires Python 3.",
-                failures=[],
-                rc=1,
-            )
         if not self.list and not self.download_only and os.geteuid() != 0:
             self.module.fail_json(
                 msg="This command has to be run under the root user.",
-                failures=[],
-                rc=1,
-            )
-
-        if self.enable_plugin or self.disable_plugin:
-            self.module.fail_json(
-                msg="enable_plugin and disable_plugin options are not yet implemented in DNF5",
                 failures=[],
                 rc=1,
             )
@@ -504,7 +506,7 @@ class Dnf5Module(YumDnf):
             conf.config_file_path = self.conf_file
 
         try:
-            base.load_config_from_file()
+            base.load_config()
         except RuntimeError as e:
             self.module.fail_json(
                 msg=str(e),
@@ -539,12 +541,28 @@ class Dnf5Module(YumDnf):
         if self.download_dir:
             conf.destdir = self.download_dir
 
+        if self.enable_plugin:
+            try:
+                base.enable_disable_plugins(self.enable_plugin, True)
+            except AttributeError:
+                self.module.fail_json(msg="'enable_plugin' requires python3-libdnf5 5.2.0.0+")
+
+        if self.disable_plugin:
+            try:
+                base.enable_disable_plugins(self.disable_plugin, False)
+            except AttributeError:
+                self.module.fail_json(msg="'disable_plugin' requires python3-libdnf5 5.2.0.0+")
+
         base.setup()
+
+        # https://github.com/rpm-software-management/dnf5/issues/1460
+        self.fail_on_non_existing_plugins(base)
 
         log_router = base.get_logger()
         global_logger = libdnf5.logger.GlobalLogger()
         global_logger.set(log_router.get(), libdnf5.logger.Logger.Level_DEBUG)
-        logger = libdnf5.logger.create_file_logger(base)
+        # FIXME hardcoding the filename does not seem right, should libdnf5 expose the default file name?
+        logger = libdnf5.logger.create_file_logger(base, "dnf5.log")
         log_router.add_logger(logger)
 
         if self.update_cache:
@@ -569,7 +587,11 @@ class Dnf5Module(YumDnf):
             for repo in repo_query:
                 repo.enable()
 
-        sack.update_and_load_enabled_repos(True)
+        try:
+            sack.load_repos()
+        except AttributeError:
+            # dnf5 < 5.2.0.0
+            sack.update_and_load_enabled_repos(True)
 
         if self.update_cache and not self.names and not self.list:
             self.module.exit_json(
@@ -601,7 +623,11 @@ class Dnf5Module(YumDnf):
             self.module.exit_json(msg="", results=results, rc=0)
 
         settings = libdnf5.base.GoalJobSettings()
-        settings.group_with_name = True
+        try:
+            settings.set_group_with_name(True)
+        except AttributeError:
+            # dnf5 < 5.2.0.0
+            settings.group_with_name = True
         if self.bugfix or self.security:
             advisory_query = libdnf5.advisory.AdvisoryQuery(base)
             types = []
